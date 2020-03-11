@@ -7,13 +7,8 @@ An Unnamed Domotic Project
 ```bash
 # Clone the repo
 git clone https://github.com/gianluparri03/audp.git
-cd audp
-
-# Set gopath
-export GOPATH='pwd'
-export GOBIN=$GOPATH/bin
+cd audp/api
 
 # Start the api
-cd src/
-go run api/*.go
+go run *.go
 ```

@@ -7,16 +7,17 @@ import (
 
 
 type Device struct {
-    id              int    `json:"id"`
-    controller_id   int    `json:"controller_id"`
-    name            string `json:"name"`
-    status          bool   `json:"status"`
+    ID      int    `json:"id"`
+    CID     int    `json:"controller_id"`
+    Name    string `json:"name"`
+    Status  bool   `json:"status"`
 }
 
 type Controller struct {
-    id      int     `json:"id"`
-    url     string  `json:"url"`
-    name    string  `json:"name"`
+    ID      int      `json:"id"`
+    Url     string   `json:"url"`
+    Name    string   `json:"name"`
+    Devices []Device `json:"devices"`
 }
 
 

@@ -1,3 +1,2 @@
 *.sublime-*
-src/api/database.db
-pkg
+#api/database.db
