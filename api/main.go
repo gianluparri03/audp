@@ -1,7 +1,6 @@
 package main
 
 import (
-    "fmt"
     "log"
 
     "net/http"
@@ -9,21 +8,19 @@ import (
 )
 
 func main() {
-    // Connect to the database
-    _, err := Initialize_DB()
-
-    // Look for errors
+    // Initialize the database
+    err := Initialize_DB()
     if err != nil { log.Fatal(err) }
 
     // Initialize the router
-    r := mux.NewRouter()
+    router := mux.NewRouter()
 
-    // Add ping route
-    r.HandleFunc("/", func (w http.ResponseWriter, r *http.Request) {
-        fmt.Fprintf(w, "working")
+    // Add routes
+    router.HandleFunc("/", func (w http.ResponseWriter, r *http.Request) {
+        w.Write([]byte("working\n"))
     })
 
     // Start the server
-    fmt.Println("Starting AUDP API on http://localhost:8080...")
-    http.ListenAndServe(":8080", r)
+    log.Println("Starting AUDP API on http://localhost:8080...")
+    log.Fatal(http.ListenAndServe(":8080", router))
 }
