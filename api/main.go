@@ -14,11 +14,15 @@ func main() {
 
     // Initialize the router
     router := mux.NewRouter()
+    router.Use(Middleware)
 
     // Add routes
-    router.HandleFunc("/", func (w http.ResponseWriter, r *http.Request) {
-        w.Write([]byte("working\n"))
-    })
+    router.HandleFunc("/", Ping).Methods("GET")
+    router.HandleFunc("/controllers", ControllersList).Methods("GET")
+
+    // Custom errors
+    router.NotFoundHandler = Error404()
+    router.MethodNotAllowedHandler = Error405()
 
     // Start the server
     log.Println("Starting AUDP API on http://localhost:8080...")
