@@ -18,11 +18,8 @@ func main() {
 
     // Add routes
     router.HandleFunc("/", Ping).Methods("GET")
-    router.HandleFunc("/controllers", ControllersList).Methods("GET")
-
-    // Custom errors
-    router.NotFoundHandler = Error404()
-    router.MethodNotAllowedHandler = Error405()
+    router.HandleFunc("/controllers", ListControllers).Methods("GET")
+    router.HandleFunc("/controllers/add", AddController).Methods("POST")
 
     // Start the server
     log.Println("Starting AUDP API on http://localhost:8080...")
