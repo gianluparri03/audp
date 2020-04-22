@@ -1,9 +1,9 @@
 package main
 
 import (
-    "encoding/json"
     "net/http"
     "strings"
+    "encoding/json"
 )
 
 
@@ -20,7 +20,7 @@ func Middleware(next http.Handler) http.Handler {
 // Ping
 func Ping(w http.ResponseWriter, r *http.Request) {
     // Return a simple {"msg": "AUDP APIs working"}
-    response := map[string]string{"msg": "AUDP APIs working"}
+    response := map[string]string{"msg": "AUDP APIs working", "version": "v0.1dev"}
 
     json.NewEncoder(w).Encode(response)
 }
@@ -29,14 +29,14 @@ func Ping(w http.ResponseWriter, r *http.Request) {
 // Controllers
 func ListControllers(w http.ResponseWriter, r *http.Request) {
     // Query controllers
-    rows, _ := DB.Query(`SELECT id, url, name FROM controllers`)
+    rows, _ := DB.Query(`SELECT id, ip, mac, port, name, sleeping FROM controllers`)
     defer rows.Close()
 
     // Create the controllers list
     var controllers  []Controller
     for rows.Next() {
         var c Controller
-        rows.Scan(&c.ID, &c.URL, &c.Name)
+        rows.Scan(&c.ID, &c.IP, &c.MAC, &c.Port, &c.Name, &c.Sleeping)
         controllers = append(controllers, c)
     }
 
@@ -72,17 +72,23 @@ func AddController(w http.ResponseWriter, r *http.Request) {
     var c Controller
     json.NewDecoder(r.Body).Decode(&c)
 
-    // Check controller's name
+    // Check if there is all the required parameters
     if c.Name == "" {
         http.Error(w, `Missing controller's name`, http.StatusBadRequest)
         return
+    } else if c.Port == 0 {
+        http.Error(w, `Missing controller's port`, http.StatusBadRequest)
+        return
+    } else if c.MAC == "" {
+        http.Error(w, `Missing controller's mac address`, http.StatusBadRequest)
+        return
     }
 
-    // Set controller's URL
+    // Set controller's IP
     if ip := r.Header.Get("X-FORWARDED-FOR"); ip != "" {
-        c.URL = "http://" + strings.Split(ip, ":")[0]
+        c.IP = strings.Split(ip, ":")[0]
     } else {
-        c.URL = "http://" + strings.Split(r.RemoteAddr, ":")[0]
+        c.IP = strings.Split(r.RemoteAddr, ":")[0]
     }
 
     // Check if every device is valid
@@ -97,16 +103,19 @@ func AddController(w http.ResponseWriter, r *http.Request) {
     err := c.SaveAll()
 
     // Check for errors
-    switch err.Error() {
+    if (err != nil) { switch err.Error() {
         case "UNIQUE constraint failed: controllers.name":
             http.Error(w, "Controller's name already used", http.StatusBadRequest); return
 
-        case "UNIQUE constraint failed: controllers.url":
-            http.Error(w, "Already registered a controller from that ip", http.StatusBadRequest); return
+        case "Already registered a controller with that URL":
+            http.Error(w, "Already registered a controller with that URL", http.StatusBadRequest); return
+
+        case "UNIQUE constraint failed: controllers.mac":
+            http.Error(w, "Already registered a controller with that mac address", http.StatusBadRequest); return
 
         case "UNIQUE constraint failed: devices.name":
             http.Error(w, "Device's name already used", http.StatusBadRequest); return
-    }
+    }}
 
     // If there have been no errors return the saved controller
     json.NewEncoder(w).Encode(c)

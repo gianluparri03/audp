@@ -3,6 +3,7 @@ package main
 import (
     "database/sql"
     _ "github.com/mattn/go-sqlite3"
+    "fmt"
 )
 
 
@@ -11,17 +12,20 @@ var DB *sql.DB
 
 
 type Device struct {
-    ID      int64  `json:"id"`
-    CID     int64  `json:"controller_id"`
-    Name    string `json:"name"`
-    Status  bool   `json:"status"`
+    ID       int64    `json:"id"`
+    CID      int64    `json:"controller_id"`
+    Name     string   `json:"name"`
+    Status   bool     `json:"status"`
 }
 
 type Controller struct {
-    ID      int64    `json:"id"`
-    URL     string   `json:"url"`
-    Name    string   `json:"name"`
-    Devices []Device `json:"devices"`
+    ID       int64    `json:"id"`
+    IP       string   `json:"ip"`
+    MAC      string   `json:"mac_address"`
+    Port     int64    `json:"port"`
+    Name     string   `json:"name"`
+    Devices  []Device `json:"devices"`
+    Sleeping bool     `json:"sleeping"`
 }
 
 
@@ -30,7 +34,7 @@ func (d *Device) Save() (error) {
     query := "SELECT name FROM controllers WHERE id = ?"
     var name string
     err := DB.QueryRow(query, d.CID).Scan(&name)
-    if err != nil { return err }
+    if err != nil { return fmt.Errorf("Controller does not exists") }
 
     // Insert device in the database
     statement, _ := DB.Prepare(`INSERT INTO devices (cid, name, status) VALUES (?, ?, ?)`)
@@ -47,9 +51,15 @@ func (d *Device) Save() (error) {
 }
 
 func (c *Controller) Save() (error) {
+    // Check URI
+    query := "SELECT name FROM controllers WHERE ip = ? AND port = ?"
+    var query_result string
+    DB.QueryRow(query, c.IP, c.Port).Scan(&query_result)
+    if query_result != "" { return fmt.Errorf("Already registered a controller with that URL") }
+
     // Insert controller in the database
-    statement, _ := DB.Prepare(`INSERT INTO controllers (url, name) VALUES (?, ?)`)
-    result, err := statement.Exec(c.URL, c.Name)
+    statement, _ := DB.Prepare(`INSERT INTO controllers (ip, mac, port, name, sleeping) VALUES (?, ?, ?, ?, ?)`)
+    result, err := statement.Exec(c.IP, c.MAC, c.Port, c.Name, c.Sleeping)
 
     // Check for errors
     if err != nil { return err }
@@ -93,14 +103,17 @@ func Initialize_DB() (error) {
                                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                                 cid INTEGER NOT NULL,
                                 name STRING UNIQUE NOT NULL,
-                                status INTEGER NOT NULL);`)
+                                status BOOLEAN NOT NULL);`)
     statement.Exec()
 
     // Create controllers table if it doesn't exist
     statement, _ = DB.Prepare(`CREATE TABLE IF NOT EXISTS controllers (
                                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                url STRING UNIQUE NOT NULL,
-                                name STRING NOT NULL);`)
+                                ip STRING NOT NULL,
+                                mac STRING UNIQUE NOT NULL,
+                                port INTEGER NOT NULL,
+                                name STRING UNIQUE NOT NULL,
+                                sleeping BOOLEAN);`)
     statement.Exec()
 
     return nil
