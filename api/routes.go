@@ -69,9 +69,12 @@ func AddController(w http.ResponseWriter, r *http.Request) {
     }
 
     // Check if every device is valid
-    for did := range c.Devices {
-        if c.Devices[did].Name == "" {
+    for _, d := range c.Devices {
+        if d.Name == "" {
             http.Error(w, `Missing device's name`, http.StatusBadRequest)
+            return
+        } else if d.GPIO == nil {
+            http.Error(w, `Missing device's gpio`, http.StatusBadRequest)
             return
         }
     }
@@ -81,11 +84,11 @@ func AddController(w http.ResponseWriter, r *http.Request) {
 
     // Check for errors
     if (err != nil) { switch err.Error() {
+        case "Already registered a controller with that URL", "Device's GPIO is already used":
+            http.Error(w, err.Error(), http.StatusBadRequest); return
+
         case "UNIQUE constraint failed: controllers.name":
             http.Error(w, "Controller's name already used", http.StatusBadRequest); return
-
-        case "Already registered a controller with that URL":
-            http.Error(w, "Already registered a controller with that URL", http.StatusBadRequest); return
 
         case "UNIQUE constraint failed: controllers.mac":
             http.Error(w, "Already registered a controller with that mac address", http.StatusBadRequest); return
@@ -96,6 +99,9 @@ func AddController(w http.ResponseWriter, r *http.Request) {
         default:
             http.Error(w, err.Error(), http.StatusInternalServerError); return
     }}
+
+    // Check if controller is sleeping
+    c.Check()
 
     // If there have been no errors return the saved controller
     json.NewEncoder(w).Encode(c)
