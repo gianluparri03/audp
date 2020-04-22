@@ -11,13 +11,6 @@ import (
 var DB *sql.DB
 
 
-type Device struct {
-    ID       int64    `json:"id"`
-    CID      int64    `json:"controller_id"`
-    Name     string   `json:"name"`
-    Status   bool     `json:"status"`
-}
-
 type Controller struct {
     ID       int64    `json:"id"`
     IP       string   `json:"ip"`
@@ -28,28 +21,6 @@ type Controller struct {
     Sleeping bool     `json:"sleeping"`
 }
 
-
-func (d *Device) Save() (error) {
-    // Check if controller exists
-    query := "SELECT name FROM controllers WHERE id = ?"
-    var name string
-    err := DB.QueryRow(query, d.CID).Scan(&name)
-    if err != nil { return fmt.Errorf("Controller does not exists") }
-
-    // Insert device in the database
-    statement, _ := DB.Prepare(`INSERT INTO devices (cid, name, status) VALUES (?, ?, ?)`)
-    result, err := statement.Exec(d.CID, d.Name, d.Status)
-
-    // Check for errors
-    if err != nil { return err }
-
-    // Set device's id
-    d.ID, _ = result.LastInsertId()
-
-    // Return nil if no error have been encountered
-    return nil
-}
-
 func (c *Controller) Save() (error) {
     // Check URI
     query := "SELECT name FROM controllers WHERE ip = ? AND port = ?"
@@ -58,10 +29,7 @@ func (c *Controller) Save() (error) {
     if query_result != "" { return fmt.Errorf("Already registered a controller with that URL") }
 
     // Insert controller in the database
-    statement, _ := DB.Prepare(`INSERT INTO controllers (ip, mac, port, name, sleeping) VALUES (?, ?, ?, ?, ?)`)
-    result, err := statement.Exec(c.IP, c.MAC, c.Port, c.Name, c.Sleeping)
-
-    // Check for errors
+    result, err := DB.Exec(`INSERT INTO controllers (ip, mac, port, name, sleeping) VALUES (?, ?, ?, ?, ?)`, c.IP, c.MAC, c.Port, c.Name, c.Sleeping)
     if err != nil { return err }
 
     // Set controller's id
@@ -83,6 +51,56 @@ func (c *Controller) SaveAll() (error) {
         if err != nil { return err }
         c.Devices[i] = d
     }
+
+    // Return nil if no error have been encountered
+    return nil
+}
+
+func (c *Controller) Delete() (error) {
+    // If there isn't the id raise an error
+    if c.ID == 0 {
+        return fmt.Errorf("Missing controller's ID")
+    }
+
+    // Check if it existed    
+    query := "SELECT name FROM controllers WHERE id = ?"
+    var query_result string
+    DB.QueryRow(query, c.ID).Scan(&query_result)
+    if query_result == "" { return fmt.Errorf("Controller does not exists") }
+
+    // Delete the controller
+    _, err:= DB.Exec(`DELETE FROM controllers WHERE id = ?`, c.ID)
+    if err != nil { return err }
+
+    // Delete all the related devices
+    _, err = DB.Exec(`DELETE FROM devices WHERE cid = ?`, c.ID)
+    if err != nil { return err }
+
+    // If no error have been returned return nil
+    return nil
+}
+
+
+type Device struct {
+    ID       int64    `json:"id"`
+    CID      int64    `json:"controller_id"`
+    Name     string   `json:"name"`
+    Status   bool     `json:"status"`
+}
+
+func (d *Device) Save() (error) {
+    // Check if controller exists
+    query := "SELECT name FROM controllers WHERE id = ?"
+    var name string
+    err := DB.QueryRow(query, d.CID).Scan(&name)
+    if err != nil { return fmt.Errorf("Controller does not exists") }
+
+    // Insert device in the database
+    result, err := DB.Exec(`INSERT INTO devices (cid, name, status) VALUES (?, ?, ?)`, d.CID, d.Name, d.Status)
+    if err != nil { return err }
+
+    // Set device's id
+    d.ID, _ = result.LastInsertId()
 
     // Return nil if no error have been encountered
     return nil

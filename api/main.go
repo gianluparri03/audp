@@ -20,6 +20,7 @@ func main() {
     router.HandleFunc("/", Ping).Methods("GET")
     router.HandleFunc("/controllers", ListControllers).Methods("GET")
     router.HandleFunc("/controllers/add", AddController).Methods("POST")
+    router.HandleFunc("/controllers/delete", DeleteController).Methods("POST")
 
     // Start the server
     log.Println("Starting AUDP API on http://localhost:8080...")
