@@ -21,6 +21,44 @@ type Controller struct {
     Sleeping bool     `json:"sleeping"`
 }
 
+func GetControllersList(devices bool) []Controller {
+    // Query controllers
+    rows, _ := DB.Query(`SELECT id, ip, mac, port, name, sleeping FROM controllers`)
+    defer rows.Close()
+
+    // Create a map of controllers (id: controller)
+    controllers := make(map[int64]Controller)
+    for rows.Next() {
+        var c Controller
+        rows.Scan(&c.ID, &c.IP, &c.MAC, &c.Port, &c.Name, &c.Sleeping)
+        controllers[c.ID] = c
+    }
+
+    // Add the devices if devices is true
+    if devices {
+        // Query devices
+        rows, _ = DB.Query(`SELECT id, cid, name, status FROM devices`)
+        defer rows.Close()
+
+        // Add devices to the controllers' devices list
+        for rows.Next() {
+            var d Device
+            rows.Scan(&d.ID, &d.CID, &d.Name, &d.Status)
+
+            c := controllers[d.CID]
+            c.Devices = append(c.Devices, d)
+        }
+    }
+
+    // Create the controllers list
+    var controllers_list []Controller
+    for _, c := range controllers {
+        controllers_list = append(controllers_list, c)
+    }
+
+    return controllers_list
+}
+
 func (c *Controller) Save() (error) {
     // Check URI
     query := "SELECT name FROM controllers WHERE ip = ? AND port = ?"

@@ -21,47 +21,18 @@ func Middleware(next http.Handler) http.Handler {
 func Ping(w http.ResponseWriter, r *http.Request) {
     // Return a simple {"msg": "AUDP APIs working"}
     response := map[string]string{"msg": "AUDP APIs working", "version": "v0.1dev"}
-
     json.NewEncoder(w).Encode(response)
 }
 
 
 // Controllers
 func ListControllers(w http.ResponseWriter, r *http.Request) {
-    // Query controllers
-    rows, _ := DB.Query(`SELECT id, ip, mac, port, name, sleeping FROM controllers`)
-    defer rows.Close()
-
-    // Create a map of controllers (id: controller)
-    controllers := make(map[int64]Controller)
-    for rows.Next() {
-        var c Controller
-        rows.Scan(&c.ID, &c.IP, &c.MAC, &c.Port, &c.Name, &c.Sleeping)
-        controllers[c.ID] = c
-    }
-
-    // Query devices
-    rows, _ = DB.Query(`SELECT id, cid, name, status FROM devices`)
-    defer rows.Close()
-
-    // Add devices to the controllers' devices list
-    for rows.Next() {
-        var d Device
-        rows.Scan(&d.ID, &d.CID, &d.Name, &d.Status)
-
-        c := controllers[d.CID]
-        c.Devices = append(c.Devices, d)
-    }
-
-    // Create the controllers list
-    var controllers_list []Controller
-    for _, c := range controllers {
-        controllers_list = append(controllers_list, c)
-    }
+    // Get controllers (with devices)
+    controllers := GetControllersList(true)
 
     // Write the response
-    if controllers_list != nil {
-        json.NewEncoder(w).Encode(controllers_list)
+    if controllers != nil {
+        json.NewEncoder(w).Encode(controllers)
     } else {
         json.NewEncoder(w).Encode([]Controller{})
     }
