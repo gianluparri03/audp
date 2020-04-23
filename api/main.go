@@ -37,7 +37,9 @@ func RunCronJobs() {
     // Check all the controllers every 10 seconds
     gocron.Every(10).Second().Do(func() {
         for _, controller := range GetControllersList(false) {
-            controller.Check()
+            if !controller.Sleeping {
+                controller.Check()
+            }
         }
     })
 

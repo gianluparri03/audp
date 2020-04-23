@@ -84,14 +84,17 @@ func AddController(w http.ResponseWriter, r *http.Request) {
 
     // Check for errors
     if (err != nil) { switch err.Error() {
-        case "Already registered a controller with that URL", "Device's GPIO is already used":
+        case "Device's GPIO is already used":
             http.Error(w, err.Error(), http.StatusBadRequest); return
 
         case "UNIQUE constraint failed: controllers.name":
             http.Error(w, "Controller's name already used", http.StatusBadRequest); return
 
+        case "UNIQUE constraint failed: controllers.ip":
+            http.Error(w, "Already registered a controller with that IP address", http.StatusBadRequest); return
+
         case "UNIQUE constraint failed: controllers.mac":
-            http.Error(w, "Already registered a controller with that mac address", http.StatusBadRequest); return
+            http.Error(w, "Already registered a controller with that MAC address", http.StatusBadRequest); return
 
         case "UNIQUE constraint failed: devices.name":
             http.Error(w, "Device's name already used", http.StatusBadRequest); return

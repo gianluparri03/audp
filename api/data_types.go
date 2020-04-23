@@ -86,12 +86,6 @@ func FetchController(id int64, devices bool) (Controller, error) {
 }
 
 func (c *Controller) Save() (error) {
-    // Check URI
-    query := "SELECT name FROM controllers WHERE ip = ? AND port = ?"
-    var query_result string
-    DB.QueryRow(query, c.IP, c.Port).Scan(&query_result)
-    if query_result != "" { return fmt.Errorf("Already registered a controller with that URL") }
-
     // Insert controller in the database
     result, err := DB.Exec(`INSERT INTO controllers (ip, mac, port, name, sleeping) VALUES (?, ?, ?, ?, ?)`, c.IP, c.MAC, c.Port, c.Name, c.Sleeping)
     if err != nil { return err }
@@ -145,7 +139,7 @@ func (c *Controller) Delete() (error) {
 
 func (c *Controller) Check() {
     // Build the controller's url
-    url := fmt.Sprintf("http://%s:%d/ping", c.IP, c.Port)
+    url := fmt.Sprintf("http://%s:%d/", c.IP, c.Port)
 
     // If the server can't connect to it, set it as sleeping
     if _, err := http.Get(url); err != nil {
@@ -208,7 +202,7 @@ func Initialize_DB() (error) {
     // Create controllers table if it doesn't exist
     statement, _ = DB.Prepare(`CREATE TABLE IF NOT EXISTS controllers (
                                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                ip STRING NOT NULL,
+                                ip STRING UNIQUE NOT NULL,
                                 mac STRING UNIQUE NOT NULL,
                                 port INTEGER NOT NULL,
                                 name STRING UNIQUE NOT NULL,
