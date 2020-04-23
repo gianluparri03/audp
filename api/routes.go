@@ -107,6 +107,51 @@ func AddController(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(c)
 }
 
+func WakeUpController(w http.ResponseWriter, r *http.Request) {
+    // Check Content-Type
+    if r.Header.Get("Content-Type") != "application/json" {
+        http.Error(w, `Body "Content-Type" must be "application/json"`, http.StatusUnsupportedMediaType)
+        return
+    }
+
+    // Parse the controller
+    var c Controller
+    json.NewDecoder(r.Body).Decode(&c)
+
+    // Check if there is all the required parameters
+    if c.MAC == "" {
+        http.Error(w, `Missing controller's mac address`, http.StatusBadRequest)
+        return
+    }
+
+    // Get that controller
+    var id int64
+    query := "SELECT id FROM controllers WHERE mac=?"
+    DB.QueryRow(query, c.MAC).Scan(&id)
+
+    // Check f it exists, otherwise return an error
+    if id == 0 {
+        http.Error(w, "There isn't a controller with that MAC address", http.StatusBadRequest)
+        return
+    }
+
+    // Fetch the controller
+    c, _ = FetchController(id, true)
+
+    // Check if it's sleeping (if not return an error)
+    if !c.Sleeping {
+        http.Error(w, "The controller isn't sleeping", http.StatusBadRequest)
+        return
+    }
+
+    // Set it to awake
+    c.Sleeping = false
+    DB.Exec(`UPDATE controllers SET sleeping=false WHERE id = ?`, c.ID)
+
+    // If there have been no errors return the saved controller
+    json.NewEncoder(w).Encode(c)
+}
+
 func DeleteController(w http.ResponseWriter, r *http.Request) {
     // Check Content-Type
     if r.Header.Get("Content-Type") != "application/json" {

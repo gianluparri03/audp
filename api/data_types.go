@@ -29,25 +29,25 @@ func GetControllersList(devices bool) []Controller {
     var controllers []Controller
 
     // Query the controllers
-    controllers_rows, _ := DB.Query(`SELECT id, ip, mac, port, name, sleeping FROM controllers`)
-    defer controllers_rows.Close()
+    crows, _ := DB.Query(`SELECT id, ip, mac, port, name, sleeping FROM controllers`)
+    defer crows.Close()
 
     // Create a map of controllers (id: controller)
-    for controllers_rows.Next() {
+    for crows.Next() {
         // Create the controller
         var c Controller
-        controllers_rows.Scan(&c.ID, &c.IP, &c.MAC, &c.Port, &c.Name, &c.Sleeping)
+        crows.Scan(&c.ID, &c.IP, &c.MAC, &c.Port, &c.Name, &c.Sleeping)
 
         // If devices is true
         if devices {
             // Query the devices
-            devices_rows, _ := DB.Query(`SELECT id, cid, gpio, name, status FROM devices WHERE cid = ?`, c.ID)
-            defer devices_rows.Close()
+            drows, _ := DB.Query(`SELECT id, cid, gpio, name, status FROM devices WHERE cid = ?`, c.ID)
+            defer drows.Close()
 
             // Add devices to the controllers' devices list
-            for devices_rows.Next() {
+            for drows.Next() {
                 var d Device
-                devices_rows.Scan(&d.ID, &d.CID, &d.GPIO, &d.Name, &d.Status)
+                drows.Scan(&d.ID, &d.CID, &d.GPIO, &d.Name, &d.Status)
                 c.Devices = append(c.Devices, d)
             }
         }
@@ -57,6 +57,32 @@ func GetControllersList(devices bool) []Controller {
     }
 
     return controllers
+}
+
+func FetchController(id int64, devices bool) (Controller, error) {
+    // Get the controller
+    var c Controller
+    query := "SELECT id, ip, mac, port, name, sleeping FROM controllers WHERE id = ?"
+    DB.QueryRow(query, id).Scan(&c.ID, &c.IP, &c.MAC, &c.Port, &c.Name, &c.Sleeping)
+
+    // If it doesn't exist return an error
+    if c.ID == 0 { return Controller{}, fmt.Errorf("Controller with that ID doesn't exist") }
+
+    // If devices is true
+    if devices {
+        // Query the devices
+        rows, _ := DB.Query(`SELECT id, cid, gpio, name, status FROM devices WHERE cid = ?`, c.ID)
+        defer rows.Close()
+
+        // Add devices to the controller's devices list
+        for rows.Next() {
+            var d Device
+            rows.Scan(&d.ID, &d.CID, &d.GPIO, &d.Name, &d.Status)
+            c.Devices = append(c.Devices, d)
+        }
+    }
+
+    return c, nil
 }
 
 func (c *Controller) Save() (error) {
