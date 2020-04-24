@@ -103,9 +103,6 @@ func AddController(w http.ResponseWriter, r *http.Request) {
             http.Error(w, err.Error(), http.StatusInternalServerError); return
     }}
 
-    // Check if controller is sleeping
-    c.Check()
-
     // If there have been no errors return the saved controller
     json.NewEncoder(w).Encode(c)
 }
@@ -117,7 +114,7 @@ func WakeUpController(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Parse the controller
+    // Parse the controller from the request
     var c Controller
     json.NewDecoder(r.Body).Decode(&c)
 
@@ -127,31 +124,39 @@ func WakeUpController(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Get that controller
+    // Fetch that controller from the db
     var id int64
-    query := "SELECT id FROM controllers WHERE mac=?"
-    DB.QueryRow(query, c.MAC).Scan(&id)
+    var sleeping bool
+    query := "SELECT id, sleeping FROM controllers WHERE mac=?"
+    DB.QueryRow(query, c.MAC).Scan(&id, &sleeping)
 
-    // Check f it exists, otherwise return an error
+    // Check if it exists
     if id == 0 {
         http.Error(w, "There isn't a controller with that MAC address", http.StatusBadRequest)
         return
-    }
-
-    // Fetch the controller
-    c, _ = FetchController(id, true)
-
-    // Check if it's sleeping (if not return an error)
-    if !c.Sleeping {
+    // And if it's sleeping
+    } else if !sleeping {
         http.Error(w, "The controller isn't sleeping", http.StatusBadRequest)
         return
     }
 
-    // Set it to awake
-    c.Sleeping = false
-    DB.Exec(`UPDATE controllers SET sleeping=false WHERE id = ?`, c.ID)
+    // Set controller's IP
+    if ip := r.Header.Get("X-FORWARDED-FOR"); ip != "" {
+        c.IP = strings.Split(ip, ":")[0]
+    } else {
+        c.IP = strings.Split(r.RemoteAddr, ":")[0]
+    }
+
+    // Set the controller to awake and add the new ip
+    DB.Exec(`UPDATE controllers SET sleeping=false, ip=? WHERE id = ?`, c.IP, c.ID)
+
+    // If a new port was specified, save it
+    if c.Port != 0 {
+        DB.Exec(`UPDATE controllers SET sleeping=false, ip=?, port=? WHERE id = ?`, c.IP, c.Port, c.ID)
+    }
 
     // If there have been no errors return the saved controller
+    c, _ = FetchController(id, true)
     json.NewEncoder(w).Encode(c)
 }
 
