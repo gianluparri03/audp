@@ -11,14 +11,47 @@ import (
 
 
 
+/* Database */
 var DB *sql.DB
 
+func Initialize_DB() (error) {
+    // Connect to the database
+    var err error
+    DB, err = sql.Open("sqlite3", "database.db")
 
+    // Look for errors
+    if err != nil { return err }
+    if err := DB.Ping(); err != nil { return err }
+
+    // Create devices table if it doesn't exist
+    statement, _ := DB.Prepare(`CREATE TABLE IF NOT EXISTS devices (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                cid INTEGER NOT NULL,
+                                gpio INTEGER NOT NULL,
+                                name STRING UNIQUE NOT NULL,
+                                status BOOLEAN NOT NULL);`)
+    statement.Exec()
+
+    // Create controllers table if it doesn't exist
+    statement, _ = DB.Prepare(`CREATE TABLE IF NOT EXISTS controllers (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                ip STRING UNIQUE NOT NULL,
+                                code STRING UNIQUE NOT NULL,
+                                port INTEGER NOT NULL,
+                                name STRING UNIQUE NOT NULL,
+                                sleeping BOOLEAN);`)
+    statement.Exec()
+
+    return nil
+}
+
+
+/* Controllers */
 type Controller struct {
     ID       int64    `json:"id"`
     IP       string   `json:"ip"`
-    MAC      string   `json:"mac_address"`
     Port     int64    `json:"port"`
+    Code     string   `json:"code"`
     Name     string   `json:"name"`
     Devices  []Device `json:"devices"`
     Sleeping bool     `json:"sleeping"`
@@ -29,14 +62,14 @@ func GetControllersList(devices bool) []Controller {
     var controllers []Controller
 
     // Query the controllers
-    crows, _ := DB.Query(`SELECT id, ip, mac, port, name, sleeping FROM controllers`)
+    crows, _ := DB.Query(`SELECT id, ip, code, port, name, sleeping FROM controllers`)
     defer crows.Close()
 
     // Create a map of controllers (id: controller)
     for crows.Next() {
         // Create the controller
         var c Controller
-        crows.Scan(&c.ID, &c.IP, &c.MAC, &c.Port, &c.Name, &c.Sleeping)
+        crows.Scan(&c.ID, &c.IP, &c.Code, &c.Port, &c.Name, &c.Sleeping)
 
         // If devices is true
         if devices {
@@ -59,11 +92,11 @@ func GetControllersList(devices bool) []Controller {
     return controllers
 }
 
-func FetchController(id int64, devices bool) (Controller, error) {
+func GetControllerFromId(id int64, devices bool) (Controller, error) {
     // Get the controller
     var c Controller
-    query := "SELECT id, ip, mac, port, name, sleeping FROM controllers WHERE id = ?"
-    DB.QueryRow(query, id).Scan(&c.ID, &c.IP, &c.MAC, &c.Port, &c.Name, &c.Sleeping)
+    query := "SELECT id, ip, code, port, name, sleeping FROM controllers WHERE id = ?"
+    DB.QueryRow(query, id).Scan(&c.ID, &c.IP, &c.Code, &c.Port, &c.Name, &c.Sleeping)
 
     // If it doesn't exist return an error
     if c.ID == 0 { return Controller{}, fmt.Errorf("Controller with that ID doesn't exist") }
@@ -87,27 +120,11 @@ func FetchController(id int64, devices bool) (Controller, error) {
 
 func (c *Controller) Save() (error) {
     // Insert controller in the database
-    result, err := DB.Exec(`INSERT INTO controllers (ip, mac, port, name, sleeping) VALUES (?, ?, ?, ?, ?)`, c.IP, c.MAC, c.Port, c.Name, c.Sleeping)
+    result, err := DB.Exec(`INSERT INTO controllers (ip, code, port, name, sleeping) VALUES (?, ?, ?, ?, ?)`, c.IP, c.Code, c.Port, c.Name, c.Sleeping)
     if err != nil { return err }
 
     // Set controller's id
     c.ID, _ = result.LastInsertId()
-
-    // Return nil if no error have been encountered
-    return nil
-}
-
-func (c *Controller) SaveAll() (error) {
-    // Save controller
-    if err := c.Save(); err != nil { return err }
-
-    // Save every device
-    for i, d := range c.Devices {
-        d.CID = c.ID
-        err := d.Save()
-        if err != nil { return err }
-        c.Devices[i] = d
-    }
 
     // Return nil if no error have been encountered
     return nil
@@ -149,6 +166,7 @@ func (c *Controller) Check() {
 }
 
 
+/* Devices */
 type Device struct {
     ID       int64    `json:"id"`
     CID      int64    `json:"controller_id"`
@@ -177,37 +195,5 @@ func (d *Device) Save() (error) {
     d.ID, _ = result.LastInsertId()
 
     // Return nil if no error have been encountered
-    return nil
-}
-
-
-func Initialize_DB() (error) {
-    // Connect to the database
-    var err error
-    DB, err = sql.Open("sqlite3", "database.db")
-
-    // Look for errors
-    if err != nil { return err }
-    if err := DB.Ping(); err != nil { return err }
-
-    // Create devices table if it doesn't exist
-    statement, _ := DB.Prepare(`CREATE TABLE IF NOT EXISTS devices (
-                                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                cid INTEGER NOT NULL,
-                                gpio INTEGER NOT NULL,
-                                name STRING UNIQUE NOT NULL,
-                                status BOOLEAN NOT NULL);`)
-    statement.Exec()
-
-    // Create controllers table if it doesn't exist
-    statement, _ = DB.Prepare(`CREATE TABLE IF NOT EXISTS controllers (
-                                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                ip STRING UNIQUE NOT NULL,
-                                mac STRING UNIQUE NOT NULL,
-                                port INTEGER NOT NULL,
-                                name STRING UNIQUE NOT NULL,
-                                sleeping BOOLEAN);`)
-    statement.Exec()
-
     return nil
 }

@@ -62,7 +62,7 @@ void registerIntoAUDP() {
     // Prepare the request at /controllers/wakeup
     http.begin(AUDP_SERVER + "/controllers/wakeup");
     http.addHeader("Content-Type", "application/json");
-    String request_body = "{\"mac_address\": \"" + WiFi.macAddress() + "\"}";
+    String request_body = "{\"code\": \"" + WiFi.macAddress() + "\"}";
 
     // Make it
     int response_code = http.POST(request_body);
@@ -74,11 +74,11 @@ void registerIntoAUDP() {
         return;
 
     // If there isn't a controller with that MAC address register a new one
-    } else if (response_code == 400 && response_content == "There isn't a controller with that MAC address\n") {
+    } else if (response_code == 400 && response_content == "Controller not found") {
         // Prepare a new request at /controllers/add
         http.begin(AUDP_SERVER + "/controllers/add");
         http.addHeader("Content-Type", "application/json");
-        String request_body = "{\"name\": \"" + WiFi.macAddress() + "\", \"mac_address\": \"" + WiFi.macAddress() + "\", \"port\": " + PORT + "}";
+        String request_body = "{\"name\": \"" + WiFi.macAddress() + "\", \"code\": \"" + WiFi.macAddress() + "\", \"port\": " + PORT + "}";
 
         // Make it
         int response_code = http.POST(request_body);
