@@ -1,0 +1,8 @@
+language: go
+
+go:
+  - 1.14.4
+
+script:
+  - cd api/
+  - go test -count 1 -v .
