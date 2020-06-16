@@ -5,7 +5,9 @@ import (
 
     "strings"
     "bytes"
+
     "encoding/json"
+    "reflect"
 
     "net/http"
     "net/http/httptest"
@@ -45,36 +47,29 @@ func (e Endpoint) Test(t *testing.T) {
         t.Errorf("%s %s: got %d status code instead of %d", e.Method, e.Target, rr.Code, e.ResCode)
     }
 
-    // Compare responses
-    if !CompareResponses(rr.Body, e.ResBody) {
+    // Unmarshal responses
+    var got, expected interface{}
+    json.Unmarshal([]byte(e.ResBody), &expected)
+    json.Unmarshal([]byte(rr.Body.String()), &got)
+
+    // Check if they're equal
+    if !reflect.DeepEqual(got, expected) {
         got := strings.Trim(rr.Body.String(), "\n")
         expected := string(e.ResBody)
         t.Errorf("%s %s: got %v instead of %v", e.Method, e.Target, got, expected)
     }
 }
 
-func CompareResponses (gotBytes *bytes.Buffer, expectedBytes []byte) bool {
-    // Tranform got from *bytes.Buffer to map[string]{}interface
-    var got, expected map[string]interface{}
-    json.Unmarshal([]byte(gotBytes.String()), &got)
-    json.Unmarshal(expectedBytes, &expected)
-
-    // Check if they're nils and if they're of the same lenght
-    if (got == nil) != (expected == nil) || len(got) != len(expected) {
-        return false
-    }
-
-    // Compare pairs key: value
-    for k, v := range expected {
-        if got[k] != v { return false }
-    }
-
-    return true
-}
-
 func TestMain(m *testing.M) {
+    // Create temporary db
     InitializeDB("/tmp/audp.db")
     defer os.Remove("/tmp/audp.db")
+
+    // Add testing datas
+    DB.Exec(`INSERT INTO controllers (name, ip, port) VALUES ("Raspberry", "192.168.1.3", 8080);`)
+    DB.Exec(`INSERT INTO devices (cid, name, gpio, status) VALUES (1, "Lamp", 7, false);`)
+
+    // Run tests
     m.Run()
 }
 
@@ -93,26 +88,13 @@ func TestPing(t *testing.T) {
 }
 
 func TestListControllers(t *testing.T) {
-    // 200: Without controllers
+    // 200: Some controllers
     t.Run("200.1", func(t *testing.T) {
         endpoint := Endpoint{Handler: ListControllers,
                              Method: "GET",
                              Target: "/controllers",
                              ResCode: 200, 
-                             ResBody: []byte(`[]`)}
-        endpoint.Test(t)
-    })
-
-    // Add a controller
-    DB.Exec(`INSERT INTO controllers (name, ip, port) VALUES ("Raspberry", "192.168.1.3", 8080);`)
-
-    // 200: Some controllers
-    t.Run("200.2", func(t *testing.T) {
-        endpoint := Endpoint{Handler: ListControllers,
-                             Method: "GET",
-                             Target: "/controllers",
-                             ResCode: 200, 
-                             ResBody: []byte(`[{"id": 1, "name": "Test", "ip": "192.168.1.3", "port": 8080, "sleeping": false, "devices": null}]`)}
+                             ResBody: []byte(`[{"id": 1, "ip": "192.168.1.3", "port":8080, "name": "Raspberry", "devices": [{"id": 1, "controller_id": 1, "GPIO": 7, "name": "Lamp", "status": false}], "sleeping": false}]`)}
         endpoint.Test(t)
     })
 }
@@ -136,7 +118,31 @@ func TestGetController(t *testing.T) {
                              Target: "/controllers/Raspberry",
                              ReqVars: map[string]string{"name": "Raspberry"}, 
                              ResCode: 200,
-                             ResBody: []byte(`{"id": 1, "ip": "192.168.1.3", "port": 8080, "name": "Raspberry", "devices": null, "sleeping": false}`)}
+                             ResBody: []byte(`{"id": 1, "ip": "192.168.1.3", "port":8080,"name": "Raspberry", "devices": [{"id": 1, "controller_id": 1, "GPIO": 7, "name": "Lamp", "status": false}], "sleeping": false}`)}
+        endpoint.Test(t)
+    })
+}
+
+func TestGetControllerDevices(t *testing.T) {
+    // 404: Controller Not Found
+    t.Run("404.1", func(t *testing.T) {
+        endpoint := Endpoint{Handler: GetControllerDevices,
+                             Method: "GET",
+                             Target: "/controllers/Banana/devices",
+                             ReqVars: map[string]string{"name": "Banana"},
+                             ResCode: 404, 
+                             ResBody: []byte(`{"error": "controller not found", "description": "Didn't find a controller with that name"}`)}
+        endpoint.Test(t)
+    })
+
+    // 200: Some devices
+    t.Run("200.1", func(t *testing.T) {
+        endpoint := Endpoint{Handler: GetControllerDevices,
+                             Method: "GET",
+                             Target: "/controllers/Raspberry/devices",
+                             ReqVars: map[string]string{"name": "Raspberry"},
+                             ResCode: 200, 
+                             ResBody: []byte(`[{"id": 1, "controller_id": 1, "GPIO": 7, "name": "Lamp", "status": false}]`)}
         endpoint.Test(t)
     })
 }
@@ -147,9 +153,9 @@ func TestCreateController(t *testing.T) {
         endpoint := Endpoint{Handler: CreateController,
                              Method: "POST",
                              Target: "/controllers",
-                             ReqBody: []byte(`{"name": "ESP", "port": 8080}`),
+                             ReqBody: []byte(`{"name": "ESP", "port": 80}`),
                              ResCode: 201,
-                             ResBody: []byte(`{"id": 2, "ip": "127.0.0.1", "port": 8080, "name": "ESP", "devices": null, "sleeping": false}`)}
+                             ResBody: []byte(`{"id": 2, "ip": "127.0.0.1", "port": 80, "name": "ESP", "devices": null, "sleeping": false}`)}
         endpoint.Test(t)
     })
 
@@ -196,6 +202,8 @@ func TestCreateController(t *testing.T) {
                              ResBody: []byte(`{"error": "can't save controller", "description": "Controller's IP already used"}`)}
         endpoint.Test(t)
     })
+
+    DB.Exec(`DELETE FROM controllers WHERE name="ESP";`)
 }
 
 func TestWakeUpController(t *testing.T) {
@@ -203,7 +211,7 @@ func TestWakeUpController(t *testing.T) {
     t.Run("404.1", func(t *testing.T) {
         endpoint := Endpoint{Handler: WakeUpController,
                              Method: "PUT",
-                             Target: "/controllers/Toast/wakeup/8080",
+                             Target: "/controllers/Banana/wakeup/8080",
                              ReqVars: map[string]string{"name": "Banana", "port": "8080"},
                              ResCode: 404,
                              ResBody: []byte(`{"error": "can't wake up controller", "description": "Controller doesn't exist"}`)}
@@ -221,7 +229,7 @@ func TestWakeUpController(t *testing.T) {
         endpoint.Test(t)
     })
 
-    // Set the controller as sleeping
+    DB.Exec(`INSERT INTO controllers (name, ip, port) VALUES ("ESP", "127.0.0.1", 80);`)
     DB.Exec(`UPDATE controllers SET sleeping=true WHERE name="Raspberry";`)
 
     // 409: IP already used
@@ -235,7 +243,6 @@ func TestWakeUpController(t *testing.T) {
         endpoint.Test(t)
     })
 
-    // Change ESP's ip
     DB.Exec(`UPDATE controllers SET ip="192.168.1.9" WHERE name="ESP";`)
 
     // 200: Woken Up
@@ -245,9 +252,12 @@ func TestWakeUpController(t *testing.T) {
                              Target: "/controllers/Raspberry/wakeup/3030",
                              ReqVars: map[string]string{"name": "Raspberry", "port": "3030"},
                              ResCode: 200,
-                             ResBody: []byte(`{"id": 1, "ip": "127.0.0.1", "port": 3030, "name": "Raspberry", "devices": null, "sleeping": false}`)}
+                             ResBody: []byte(`{"id": 1, "ip": "127.0.0.1", "port": 3030, "name": "Raspberry", "devices": [{"id": 1, "controller_id": 1, "GPIO": 7, "name": "Lamp", "status": false}], "sleeping": false}`)}
         endpoint.Test(t)
     })
+
+    DB.Exec(`DELETE FROM controllers WHERE name="ESP";`)
+    DB.Exec(`UPDATE controllers SET port="8080", ip="192.168.1.3" WHERE name="Raspberry";`)
 }
 
 func TestDeleteController(t *testing.T) {
@@ -258,29 +268,32 @@ func TestDeleteController(t *testing.T) {
                              Target: "/controllers/Banana",
                              ReqVars: map[string]string{"name": "Banana"},
                              ResCode: 404,
-                             ResBody: []byte(`{"error":"Can't delete controller","description":"Controller doesn't exist"}`)}
+                             ResBody: []byte(`{"error": "Can't delete controller", "description": "Controller doesn't exist"}`)}
         endpoint.Test(t)
     })
+
+    DB.Exec(`INSERT INTO controllers (name, ip, port) VALUES ("ESP", "127.0.0.1", 80);`)
 
     // 204: Done
     t.Run("204.1", func(t *testing.T) {
         endpoint := Endpoint{Handler: DeleteController,
                              Method: "DELETE",
-                             Target: "/controllers/Raspberry",
-                             ReqVars: map[string]string{"name": "Raspberry"},
+                             Target: "/controllers/ESP",
+                             ReqVars: map[string]string{"name": "ESP"},
                              ResCode: 204,
-                             ResBody: []byte(``)}
+                             ResBody: []byte(`null`)}
         endpoint.Test(t)
     })
+}
 
-    // 404: Not Found
-    t.Run("404.2", func(t *testing.T) {
-        endpoint := Endpoint{Handler: DeleteController,
-                             Method: "DELETE",
-                             Target: "/controllers/Raspberry",
-                             ReqVars: map[string]string{"name": "Raspberry"},
-                             ResCode: 404,
-                             ResBody: []byte(`{"error":"Can't delete controller","description":"Controller doesn't exist"}`)}
+func TestListDevices(t *testing.T) {
+    // 200: Some devices
+    t.Run("200.1", func(t *testing.T) {
+        endpoint := Endpoint{Handler: ListDevices,
+                             Method: "GET",
+                             Target: "/controllers",
+                             ResCode: 200, 
+                             ResBody: []byte(`[{"id": 1, "controller_id": 1, "GPIO": 7, "name": "Lamp", "status": false}]`)}
         endpoint.Test(t)
     })
 }

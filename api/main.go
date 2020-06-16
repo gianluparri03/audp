@@ -35,6 +35,8 @@ func main() {
     GET.HandleFunc("/", Ping)
     GET.HandleFunc("/controllers", ListControllers)
     GET.HandleFunc("/controllers/{name}", GetController)
+    GET.HandleFunc("/controllers/{name}/devices", GetControllerDevices)
+    GET.HandleFunc("/devices", ListDevices)
 
     // Register POST endpoints
     POST := router.Methods("POST").Subrouter()

@@ -21,9 +21,9 @@ type APIError struct {
 func getIP(r *http.Request) string {
     if ip := r.Header.Get("X-FORWARDED-FOR"); ip != "" {
         return strings.Split(ip, ":")[0]
-    } else {
-        return strings.Split(r.RemoteAddr, ":")[0]
     }
+
+    return strings.Split(r.RemoteAddr, ":")[0]
 }
 
 func ReturnError(w http.ResponseWriter, code int, err APIError) {
@@ -123,6 +123,36 @@ func GetController(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(c)
 }
 
+func GetControllerDevices(w http.ResponseWriter, r *http.Request) {
+    // Get controller's name
+    name := mux.Vars(r)["name"]
+
+    // Check if it exists
+    var id int64
+    DB.QueryRow(`SELECT id FROM controllers WHERE name=?;`, name).Scan(&id)
+    if id == 0 {
+        ReturnError(w, 404, APIError{"controller not found", "Didn't find a controller with that name"})
+        return
+    }
+
+    // Create an empty list
+    var devices []Device
+
+    // Query the devices
+    rows, _ := DB.Query(`SELECT id, cid, gpio, name, status FROM devices WHERE cid=?;`, id)
+    defer rows.Close()
+
+    // Fetch them
+    for rows.Next() {
+        var d Device
+        rows.Scan(&d.ID, &d.CID, &d.GPIO, &d.Name, &d.Status)
+        devices = append(devices, d)
+    }
+
+    // Write the response
+    json.NewEncoder(w).Encode(devices)
+}
+
 func CreateController(w http.ResponseWriter, r *http.Request) {
     // Parse the controller
     var c Controller
@@ -204,10 +234,23 @@ func WakeUpController(w http.ResponseWriter, r *http.Request) {
         DB.Exec(`UPDATE controllers SET sleeping=false, ip=? WHERE name=?;`, ip, name)
     }
 
-    // If it worked, fetch the controller from the db and return it
+    // Fetch the controller from the db
     var c Controller
     query := `SELECT id, ip, port, name, sleeping FROM controllers WHERE name=?;`
     DB.QueryRow(query, name).Scan(&c.ID, &c.IP, &c.Port, &c.Name, &c.Sleeping)
+
+    // Query the connected devices
+    rows, _ := DB.Query(`SELECT id, cid, gpio, name, status FROM devices WHERE cid=?;`, c.ID)
+    defer rows.Close()
+
+    // Fetch them
+    for rows.Next() {
+        var d Device
+        rows.Scan(&d.ID, &d.CID, &d.GPIO, &d.Name, &d.Status)
+        c.Devices = append(c.Devices, d)
+    }
+
+    // Return the controller
     json.NewEncoder(w).Encode(c)
 }
 
@@ -229,4 +272,25 @@ func DeleteController(w http.ResponseWriter, r *http.Request) {
 
     // Return a 204
     w.WriteHeader(204)
+}
+
+
+// Devices' Endpoints
+func ListDevices(w http.ResponseWriter, r *http.Request) {
+    // Create an empty list
+    var devices []Device
+
+    // Query the devices
+    rows, _ := DB.Query(`SELECT id, cid, gpio, name, status FROM devices`)
+    defer rows.Close()
+
+    // Fetch them
+    for rows.Next() {
+        var d Device
+        rows.Scan(&d.ID, &d.CID, &d.GPIO, &d.Name, &d.Status)
+        devices = append(devices, d)
+    }
+
+    // Write the response
+    json.NewEncoder(w).Encode(devices)
 }

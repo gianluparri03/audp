@@ -1,5 +1,9 @@
 # AUDP
 
+![](https://img.shields.io/travis/com/gianluparri03/audp)
+![](https://img.shields.io/github/languages/code-size/gianluparri03/audp)
+![](https://img.shields.io/github/license/gianluparri03/audp)
+
 **A**n **U**nnamed **D**omotic **P**roject.
 
 
